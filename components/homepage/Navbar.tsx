@@ -5,6 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import * as THREE from "three";
 import gsap from "gsap";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useSession, signOut } from "@/lib/auth-client";
 
 const navLinks = [
   { name: "Home", href: "/" },
@@ -14,6 +17,27 @@ const navLinks = [
 ];
 
 export default function Navbar() {
+const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+
+const router = useRouter();
+
+const { data: session, isPending } = useSession();
+
+const user = session?.user;
+
+const userName = user?.name || "User";
+const userImage = user?.image;
+const userRole = (user as typeof user & { role?: string })?.role || "student";
+
+const roleLabel =
+  userRole.charAt(0).toUpperCase() + userRole.slice(1);
+
+const dashboardPath =
+  userRole === "admin"
+    ? "/admin-dashboard"
+    : userRole === "tutor"
+      ? "/tutor-dashboard"
+      : "/student-dashboard";
   const [menuOpen, setMenuOpen] = useState(false);
 
   const headerRef = useRef<HTMLElement>(null);
@@ -24,12 +48,15 @@ export default function Navbar() {
   // --------------------------------
   // GSAP: Navbar entrance animation
   // --------------------------------
-  useEffect(() => {
-    const header = headerRef.current;
-    const nav = navRef.current;
+ useEffect(() => {
+  if (isPending) return;
 
-    if (!header || !nav) return;
+  const header = headerRef.current;
+  const nav = navRef.current;
 
+  if (!header || !nav) return;
+
+  const ctx = gsap.context(() => {
     const logo = nav.querySelector(".brand-logo");
     const links = nav.querySelectorAll(".nav-link");
     const buttons = nav.querySelectorAll(".auth-btn");
@@ -39,41 +66,53 @@ export default function Navbar() {
       defaults: { ease: "power3.out" },
     });
 
-    timeline
-      .fromTo(
-        header,
-        { y: -35, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.7 }
-      )
-      .fromTo(
+    timeline.fromTo(
+      header,
+      { y: -35, opacity: 0 },
+      { y: 0, opacity: 1, duration: 0.7 }
+    );
+
+    if (logo) {
+      timeline.fromTo(
         logo,
         { opacity: 0, x: -25, rotateY: -25 },
         { opacity: 1, x: 0, rotateY: 0, duration: 0.6 },
         "-=0.3"
-      )
-      .fromTo(
+      );
+    }
+
+    if (links.length) {
+      timeline.fromTo(
         links,
         { opacity: 0, y: -15 },
         { opacity: 1, y: 0, stagger: 0.1, duration: 0.4 },
         "-=0.3"
-      )
-      .fromTo(
+      );
+    }
+
+    if (buttons.length) {
+      timeline.fromTo(
         buttons,
         { opacity: 0, y: -12, scale: 0.9 },
         { opacity: 1, y: 0, scale: 1, stagger: 0.12, duration: 0.4 },
         "-=0.3"
-      )
-      .fromTo(
+      );
+    }
+
+    if (menuButton) {
+      timeline.fromTo(
         menuButton,
         { opacity: 0, scale: 0.8 },
         { opacity: 1, scale: 1, duration: 0.3 },
         "-=0.3"
       );
+    }
+  }, nav);
 
-    return () => {
-      timeline.kill();
-    };
-  }, []);
+  return () => {
+    ctx.revert();
+  };
+}, [isPending]);
 
   // --------------------------------
   // Three.js: 3D Graduation Cap Logo
@@ -338,6 +377,23 @@ export default function Navbar() {
 
   const closeMenu = () => setMenuOpen(false);
 
+  const handleSignOut = async () => {
+  try {
+    await signOut({
+      fetchOptions: {
+        onSuccess: () => {
+          setProfileMenuOpen(false);
+          setMenuOpen(false);
+          router.push("/sign-in");
+          router.refresh();
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Sign out error:", error);
+  }
+};
+
   return (
     <header
       ref={headerRef}
@@ -377,22 +433,126 @@ export default function Navbar() {
           ))}
         </div>
 
-        {/* Desktop Auth Buttons */}
-        <div className="hidden items-center gap-4 lg:flex">
+        {/* Desktop Authentication */}
+<div className="hidden items-center gap-4 lg:flex">
+  {isPending ? (
+    <div className="h-10 w-28 animate-pulse rounded-xl bg-white/10" />
+  ) : user ? (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setProfileMenuOpen((prev) => !prev)}
+        className="auth-btn flex items-center gap-3 rounded-xl border border-white/15 bg-white/10 p-2 pr-4 transition-all hover:bg-white/15"
+      >
+        {/* Avatar */}
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-pink-400 bg-gradient-to-br from-purple-500 to-pink-500 text-sm font-bold text-white">
+          {userImage ? (
+            <Image
+              src={userImage}
+              alt={userName}
+              fill
+              unoptimized
+              sizes="40px"
+              className="object-cover"
+            />
+          ) : (
+            userName.charAt(0).toUpperCase()
+          )}
+        </div>
+
+        {/* Name and Role */}
+        <div className="flex flex-col items-start">
+          <span className="max-w-[120px] truncate text-sm font-bold text-white">
+            {userName}
+          </span>
+
+          <span className="text-xs font-semibold text-pink-300">
+            {roleLabel}
+          </span>
+        </div>
+
+        <svg
+          className={`h-4 w-4 text-white transition-transform ${
+            profileMenuOpen ? "rotate-180" : ""
+          }`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="m19 9-7 7-7-7"
+          />
+        </svg>
+      </button>
+
+      {/* Profile Dropdown */}
+      {profileMenuOpen && (
+        <div className="absolute right-0 top-full z-50 mt-3 w-64 overflow-hidden rounded-2xl border border-purple-400/20 bg-[#24104e] p-2 shadow-[0_15px_45px_rgba(0,0,0,0.4)]">
+          <div className="border-b border-white/10 px-4 py-3">
+            <p className="truncate font-bold text-white">
+              {userName}
+            </p>
+            <p className="truncate text-xs text-purple-200">
+              {user.email}
+            </p>
+
+            <span className="mt-2 inline-flex rounded-full bg-pink-500/15 px-3 py-1 text-xs font-bold text-pink-300">
+              {roleLabel}
+            </span>
+          </div>
+
           <Link
-            href="/sign-in"
-            className="auth-btn flex h-10 min-w-[90px] items-center justify-center rounded-xl border-2 border-[#e6d8ff] bg-gradient-to-br from-[#281057] to-[#1b093f] px-6 font-bold text-white shadow-[0_5px_0_#10042e] transition-all duration-300 hover:-translate-y-1 hover:[transform:perspective(700px)_rotateX(8deg)] hover:shadow-[0_9px_0_#10042e,0_15px_22px_rgba(0,0,0,0.3)] active:translate-y-1 active:shadow-none"
+            href={dashboardPath}
+            onClick={() => setProfileMenuOpen(false)}
+            className="mt-2 flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-purple-100 transition hover:bg-white/10 hover:text-pink-300"
           >
-            Sign In
+            <span>▦</span>
+            Dashboard
           </Link>
 
           <Link
-            href="/sign-up"
-            className="auth-btn flex h-10 min-w-[90px] items-center justify-center rounded-xl border border-[#c000b9] bg-gradient-to-r from-[#df079e] to-[#7516c6] px-6 font-bold text-white shadow-[0_5px_0_#510c92] transition-all duration-300 hover:-translate-y-1 hover:[transform:perspective(700px)_rotateX(8deg)] hover:shadow-[0_9px_0_#510c92,0_15px_24px_rgba(183,0,200,0.4)] active:translate-y-1 active:shadow-none"
+            href="/profile"
+            onClick={() => setProfileMenuOpen(false)}
+            className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-purple-100 transition hover:bg-white/10 hover:text-pink-300"
           >
-            Sign Up
+            <span>⚙</span>
+            Update Profile
           </Link>
+
+          <div className="my-2 border-t border-white/10" />
+
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-red-300 transition hover:bg-red-500/10"
+          >
+            <span>↪</span>
+            Sign Out
+          </button>
         </div>
+      )}
+    </div>
+  ) : (
+    <>
+      <Link
+        href="/sign-in"
+        className="auth-btn flex h-10 min-w-[90px] items-center justify-center rounded-xl border-2 border-[#e6d8ff] bg-gradient-to-br from-[#281057] to-[#1b093f] px-6 font-bold text-white shadow-[0_5px_0_#10042e] transition-all duration-300 hover:-translate-y-1"
+      >
+        Sign In
+      </Link>
+
+      <Link
+        href="/sign-up"
+        className="auth-btn flex h-10 min-w-[90px] items-center justify-center rounded-xl border border-[#c000b9] bg-gradient-to-r from-[#df079e] to-[#7516c6] px-6 font-bold text-white shadow-[0_5px_0_#510c92] transition-all duration-300 hover:-translate-y-1"
+      >
+        Sign Up
+      </Link>
+    </>
+  )}
+</div>
 
         {/* Mobile Menu Toggle */}
         <button
@@ -436,23 +596,82 @@ export default function Navbar() {
             </Link>
           ))}
 
-          <div className="flex gap-3 pt-2">
-            <Link
-              href="/sign-in"
-              onClick={closeMenu}
-              className="mobile-auth-btn flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-[#e6d8ff] font-bold text-white shadow-[0_4px_0_#10042e] transition-all hover:-translate-y-1"
-            >
-              Sign In
-            </Link>
+          <div className="border-t border-white/10 pt-5">
+  {isPending ? (
+    <div className="h-12 animate-pulse rounded-xl bg-white/10" />
+  ) : user ? (
+    <div className="space-y-3">
+      {/* Mobile User Info */}
+      <div className="flex items-center gap-3 rounded-xl bg-white/10 p-3">
+        <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-pink-400 bg-gradient-to-br from-purple-500 to-pink-500 font-bold text-white">
+          {userImage ? (
+            <Image
+              src={userImage}
+              alt={userName}
+              fill
+              unoptimized
+              sizes="48px"
+              className="object-cover"
+            />
+          ) : (
+            userName.charAt(0).toUpperCase()
+          )}
+        </div>
 
-            <Link
-              href="/sign-up"
-              onClick={closeMenu}
-              className="mobile-auth-btn flex h-11 flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-[#df079e] to-[#7516c6] font-bold text-white shadow-[0_4px_0_#510c92] transition-all hover:-translate-y-1"
-            >
-              Sign Up
-            </Link>
-          </div>
+        <div className="min-w-0">
+          <p className="truncate font-bold text-white">
+            {userName}
+          </p>
+          <span className="text-xs font-semibold text-pink-300">
+            {roleLabel}
+          </span>
+        </div>
+      </div>
+
+      <Link
+        href={dashboardPath}
+        onClick={closeMenu}
+        className="mobile-auth-btn block rounded-xl bg-white/10 px-4 py-3 font-semibold text-white transition hover:bg-white/15"
+      >
+        Dashboard
+      </Link>
+
+      <Link
+        href="/profile"
+        onClick={closeMenu}
+        className="mobile-auth-btn block rounded-xl bg-white/10 px-4 py-3 font-semibold text-white transition hover:bg-white/15"
+      >
+        Update Profile
+      </Link>
+
+      <button
+        type="button"
+        onClick={handleSignOut}
+        className="mobile-auth-btn w-full rounded-xl bg-red-500/10 px-4 py-3 text-left font-semibold text-red-300 transition hover:bg-red-500/20"
+      >
+        Sign Out
+      </button>
+    </div>
+  ) : (
+    <div className="flex gap-3">
+      <Link
+        href="/sign-in"
+        onClick={closeMenu}
+        className="mobile-auth-btn flex h-11 flex-1 items-center justify-center rounded-xl border-2 border-[#e6d8ff] font-bold text-white shadow-[0_4px_0_#10042e] transition hover:-translate-y-1"
+      >
+        Sign In
+      </Link>
+
+      <Link
+        href="/sign-up"
+        onClick={closeMenu}
+        className="mobile-auth-btn flex h-11 flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-[#df079e] to-[#7516c6] font-bold text-white shadow-[0_4px_0_#510c92] transition hover:-translate-y-1"
+      >
+        Sign Up
+      </Link>
+    </div>
+  )}
+</div>
         </div>
       </div>
     </header>
