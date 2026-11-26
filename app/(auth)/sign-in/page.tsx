@@ -578,13 +578,6 @@ const handleGoogleAuth = async () => {
                       >
                         Password
                       </label>
-
-                      <Link
-                        href="/forgot-password"
-                        className="text-xs font-semibold text-fuchsia-300 transition hover:text-fuchsia-200"
-                      >
-                        Forgot password?
-                      </Link>
                     </div>
 
                     <div className="flex items-center gap-3 rounded-xl border border-white/15 bg-[#160b30]/70 px-4 transition focus-within:border-purple-400 focus-within:ring-2 focus-within:ring-purple-500/20">
